@@ -38,6 +38,8 @@ class EmbeddingProviderSettings(BaseSettings):
     Configuration for the embedding provider.
     """
 
+    model_config = {"extra": "allow"}
+
     provider_type: EmbeddingProviderType = Field(
         default=EmbeddingProviderType.FASTEMBED,
         validation_alias="EMBEDDING_PROVIDER",
@@ -46,6 +48,47 @@ class EmbeddingProviderSettings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         validation_alias="EMBEDDING_MODEL",
     )
+    api_key: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_API_KEY",
+    )
+    base_url: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_BASE_URL",
+    )
+
+    @model_validator(mode="after")
+    def validate_provider_config(self) -> "EmbeddingProviderSettings":
+        """Validate provider-specific configuration requirements."""
+        provider = self.provider_type
+
+        # OpenAI requires API key
+        if provider == EmbeddingProviderType.OPENAI:
+            if not self.api_key:
+                raise ValueError("EMBEDDING_API_KEY is required for OpenAI provider")
+
+        # Gemini requires API key
+        elif provider == EmbeddingProviderType.GEMINI:
+            if not self.api_key:
+                raise ValueError("EMBEDDING_API_KEY is required for Gemini provider")
+
+        # Ollama requires base URL (or uses default)
+        elif provider == EmbeddingProviderType.OLLAMA:
+            if not self.base_url:
+                self.base_url = "http://localhost:11434"
+
+        # OpenAI-compatible requires both API key and base URL
+        elif provider == EmbeddingProviderType.OPENAI_COMPATIBLE:
+            if not self.api_key:
+                raise ValueError(
+                    "EMBEDDING_API_KEY is required for OpenAI-compatible provider"
+                )
+            if not self.base_url:
+                raise ValueError(
+                    "EMBEDDING_BASE_URL is required for OpenAI-compatible provider"
+                )
+
+        return self
 
 
 class FilterableField(BaseModel):

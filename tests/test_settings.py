@@ -78,6 +78,43 @@ class TestEmbeddingProviderSettings:
         assert settings.provider_type == EmbeddingProviderType.FASTEMBED
         assert settings.model_name == "custom_model"
 
+    def test_openai_provider_validation(self, monkeypatch):
+        """Test OpenAI provider requires API key."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "openai")
+        with pytest.raises(ValueError, match="EMBEDDING_API_KEY is required"):
+            EmbeddingProviderSettings()
+
+    def test_openai_provider_with_api_key(self, monkeypatch):
+        """Test OpenAI provider with API key."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "openai")
+        monkeypatch.setenv("EMBEDDING_API_KEY", "test-key")
+        settings = EmbeddingProviderSettings()
+        assert settings.provider_type == EmbeddingProviderType.OPENAI
+        assert settings.api_key == "test-key"
+
+    def test_gemini_provider_validation(self, monkeypatch):
+        """Test Gemini provider requires API key."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "gemini")
+        with pytest.raises(ValueError, match="EMBEDDING_API_KEY is required"):
+            EmbeddingProviderSettings()
+
+    def test_ollama_provider_defaults(self, monkeypatch):
+        """Test Ollama provider defaults base URL."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "ollama")
+        settings = EmbeddingProviderSettings()
+        assert settings.provider_type == EmbeddingProviderType.OLLAMA
+        assert settings.base_url == "http://localhost:11434"
+
+    def test_openai_compatible_provider_validation(self, monkeypatch):
+        """Test OpenAI-compatible provider requires both API key and base URL."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "openai-compatible")
+        with pytest.raises(ValueError, match="EMBEDDING_API_KEY is required"):
+            EmbeddingProviderSettings()
+
+        monkeypatch.setenv("EMBEDDING_API_KEY", "test-key")
+        with pytest.raises(ValueError, match="EMBEDDING_BASE_URL is required"):
+            EmbeddingProviderSettings()
+
 
 class TestToolSettings:
     def test_default_values(self):

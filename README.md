@@ -38,21 +38,95 @@ It acts as a semantic memory layer on top of the Qdrant database.
 
 The configuration of the server is done using environment variables:
 
-| Name                     | Description                                                         | Default Value                                                     |
-|--------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|
-| `QDRANT_URL`             | URL of the Qdrant server                                            | None                                                              |
-| `QDRANT_API_KEY`         | API key for the Qdrant server                                       | None                                                              |
-| `COLLECTION_NAME`        | Name of the default collection to use.                              | None                                                              |
-| `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
-| `EMBEDDING_PROVIDER`     | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
-| `EMBEDDING_MODEL`        | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
-| `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                               | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
-| `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| Name                     | Description                                                                                      | Default Value                                                     |
+|--------------------------|--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+| `QDRANT_URL`             | URL of the Qdrant server                                                                         | None                                                              |
+| `QDRANT_API_KEY`         | API key for the Qdrant server                                                                    | None                                                              |
+| `COLLECTION_NAME`        | Name of the default collection to use.                                                           | None                                                              |
+| `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)                                  | None                                                              |
+| `EMBEDDING_PROVIDER`     | Embedding provider: `fastembed`, `openai`, `gemini`, `ollama`, or `openai-compatible`            | `fastembed`                                                       |
+| `EMBEDDING_MODEL`        | Name of the embedding model to use                                                               | `sentence-transformers/all-MiniLM-L6-v2`                          |
+| `EMBEDDING_API_KEY`      | API key for cloud embedding providers (OpenAI, Gemini, OpenAI-compatible)                        | None                                                              |
+| `EMBEDDING_BASE_URL`     | Base URL for self-hosted providers (Ollama, OpenAI-compatible)                                   | `http://localhost:11434` (Ollama only)                            |
+| `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                                                            | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                                             | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
 
 Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 
 > [!IMPORTANT]
 > Command-line arguments are not supported anymore! Please use environment variables for all configuration.
+
+### Embedding Providers
+
+The server supports multiple embedding providers for generating vector embeddings. Each provider has specific configuration requirements:
+
+#### FastEmbed (Default)
+Local embedding generation using the FastEmbed library. No API key or external service required.
+
+```shell
+EMBEDDING_PROVIDER="fastembed" \
+EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
+uvx mcp-server-qdrant
+```
+
+#### OpenAI
+Use OpenAI's embedding API for high-quality embeddings.
+
+```shell
+EMBEDDING_PROVIDER="openai" \
+EMBEDDING_MODEL="text-embedding-3-small" \
+EMBEDDING_API_KEY="your-openai-api-key" \
+uvx mcp-server-qdrant[openai]
+```
+
+#### Google Gemini
+Use Google's Gemini embedding models.
+
+```shell
+EMBEDDING_PROVIDER="gemini" \
+EMBEDDING_MODEL="models/embedding-001" \
+EMBEDDING_API_KEY="your-google-api-key" \
+uvx mcp-server-qdrant[gemini]
+```
+
+#### Ollama
+Use self-hosted Ollama for local embedding generation.
+
+```shell
+EMBEDDING_PROVIDER="ollama" \
+EMBEDDING_MODEL="llama2" \
+EMBEDDING_BASE_URL="http://localhost:11434" \
+uvx mcp-server-qdrant
+```
+
+#### OpenAI-Compatible
+Use Azure OpenAI or other OpenAI-compatible endpoints.
+
+```shell
+EMBEDDING_PROVIDER="openai-compatible" \
+EMBEDDING_MODEL="text-embedding-ada-002" \
+EMBEDDING_API_KEY="your-api-key" \
+EMBEDDING_BASE_URL="https://your-endpoint.openai.azure.com" \
+uvx mcp-server-qdrant[openai]
+```
+
+> [!WARNING]
+> **Vector Dimension Considerations**: Different embedding providers and models produce vectors of different dimensions. Switching providers or models requires re-creating your Qdrant collection and re-indexing all data, as vector dimensions are immutable once a collection is created.
+
+#### Installing Provider Dependencies
+
+By default, only FastEmbed is installed. To use cloud providers, install the corresponding extras:
+
+```shell
+# For OpenAI or OpenAI-compatible providers
+uv pip install mcp-server-qdrant[openai]
+
+# For Google Gemini
+uv pip install mcp-server-qdrant[gemini]
+
+# For all providers
+uv pip install mcp-server-qdrant[all]
+```
 
 ### FastMCP Environment Variables
 
@@ -178,8 +252,7 @@ For local Qdrant mode:
 
 This MCP server will automatically create a collection with the specified name if it doesn't exist.
 
-By default, the server will use the `sentence-transformers/all-MiniLM-L6-v2` embedding model to encode memories.
-For the time being, only [FastEmbed](https://qdrant.github.io/fastembed/) models are supported.
+By default, the server will use the `sentence-transformers/all-MiniLM-L6-v2` embedding model with [FastEmbed](https://qdrant.github.io/fastembed/) to encode memories. You can choose from multiple embedding providers including OpenAI, Google Gemini, Ollama, and OpenAI-compatible endpoints. See the [Embedding Providers](#embedding-providers) section for configuration details.
 
 ## Support for other tools
 
@@ -275,9 +348,191 @@ Claude Code should be already able to:
 1. Use the `qdrant-store` tool to store code snippets with descriptions.
 2. Use the `qdrant-find` tool to search for relevant code snippets using natural language.
 
+## Local Development and Testing
+
+If you want to run the project locally for development or testing with the latest changes:
+
+### 1. Clone and Setup
+
+```bash
+# Clone the repository
+git clone git@github.com:vincentruan/mcp-server-qdrant.git
+cd mcp-server-qdrant
+
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+uv sync
+
+# Install pre-commit hooks (optional, for development)
+uv run pre-commit install
+```
+
+### 2. Run Local Qdrant Instance
+
+You can use Qdrant in-memory mode (no installation needed) or run a local Qdrant server:
+
+#### Option A: In-Memory Mode (Easiest for Testing)
+
+```bash
+# No setup needed, just set QDRANT_URL=":memory:" when running
+```
+
+#### Option B: Local Qdrant Server with Docker
+
+```bash
+docker run -p 6333:6333 -p 6334:6334 \
+    -v $(pwd)/qdrant_storage:/qdrant/storage:z \
+    qdrant/qdrant
+```
+
+### 3. Run the MCP Server Locally
+
+#### Using Default FastEmbed Provider
+
+```bash
+# With in-memory Qdrant
+QDRANT_URL=":memory:" \
+COLLECTION_NAME="test-collection" \
+uv run python -m mcp_server_qdrant.main
+
+# With local Qdrant server
+QDRANT_URL="http://localhost:6333" \
+COLLECTION_NAME="test-collection" \
+uv run python -m mcp_server_qdrant.main
+```
+
+#### Using OpenAI Provider
+
+```bash
+# Install OpenAI dependencies
+uv pip install -e ".[openai]"
+
+# Run with OpenAI
+QDRANT_URL=":memory:" \
+COLLECTION_NAME="test-collection" \
+EMBEDDING_PROVIDER="openai" \
+EMBEDDING_MODEL="text-embedding-3-small" \
+EMBEDDING_API_KEY="your-openai-api-key" \
+uv run python -m mcp_server_qdrant.main
+```
+
+#### Using Ollama Provider
+
+```bash
+# Start Ollama server (if not already running)
+ollama serve
+
+# Pull an embedding model
+ollama pull llama2
+
+# Run the MCP server with Ollama
+QDRANT_URL=":memory:" \
+COLLECTION_NAME="test-collection" \
+EMBEDDING_PROVIDER="ollama" \
+EMBEDDING_MODEL="llama2" \
+EMBEDDING_BASE_URL="http://localhost:11434" \
+uv run python -m mcp_server_qdrant.main
+```
+
+### 4. Configure MCP Clients to Use Local Server
+
+#### For Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "qdrant-local": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/mcp-server-qdrant",
+        "run",
+        "python",
+        "-m",
+        "mcp_server_qdrant.main"
+      ],
+      "env": {
+        "QDRANT_URL": ":memory:",
+        "COLLECTION_NAME": "claude-memories",
+        "EMBEDDING_PROVIDER": "fastembed",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    }
+  }
+}
+```
+
+#### For Claude Code
+
+```bash
+# Add local development server
+claude mcp add qdrant-local \
+  -e QDRANT_URL=":memory:" \
+  -e COLLECTION_NAME="code-memories" \
+  -e EMBEDDING_PROVIDER="fastembed" \
+  -- uv --directory /path/to/mcp-server-qdrant run python -m mcp_server_qdrant.main
+```
+
+### 5. Testing with MCP Inspector
+
+The MCP inspector provides a web UI for testing your server:
+
+```bash
+# Run in development mode with inspector
+QDRANT_URL=":memory:" \
+COLLECTION_NAME="test" \
+uv run fastmcp dev src/mcp_server_qdrant/server.py
+```
+
+This will:
+
+- Start the MCP server
+- Open a browser at <http://localhost:5173> with the inspector UI
+- Allow you to test tools interactively
+
+### 6. Run Tests
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=src/mcp_server_qdrant
+
+# Run specific test file
+uv run pytest tests/test_settings.py -v
+
+# Run code formatting and linting
+uv run ruff format .
+uv run ruff check . --fix
+```
+
+### 7. Using with SSE Transport (for Cursor/Windsurf)
+
+If you want to use SSE transport for remote clients:
+
+```bash
+# Run with SSE transport on port 8000
+QDRANT_URL=":memory:" \
+COLLECTION_NAME="test" \
+FASTMCP_HOST="0.0.0.0" \
+FASTMCP_PORT="8000" \
+uv run python -m mcp_server_qdrant.main --transport sse
+```
+
+Then configure Cursor/Windsurf to connect to:
+
+```text
+http://localhost:8000/sse
+```
+
 ### Run MCP server in Development Mode
 
-The MCP server can be run in development mode using the `mcp dev` command. This will start the server and open the MCP
+The MCP server can be run in development mode using the `fastmcp dev` command. This will start the server and open the MCP
 inspector in your browser.
 
 ```shell
